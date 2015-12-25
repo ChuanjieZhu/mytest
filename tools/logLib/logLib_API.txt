@@ -1,0 +1,72 @@
+void lockSysLogWriteData();
+void unlockSysLogWriteData();
+void lockManLogWriteData();
+void unlockManLogWriteData();
+int addSysLog(syslog_event_t sysLog);
+int addManLog(manlog_event_t manLog);
+int searchSysLogNum(unsigned int searchCondFlag, syslog_search_condition_t *pSearchCondition);
+int searchManLogNum(unsigned int searchCondFlag, manlog_search_condition_t *pSearchCondition);
+void showSysLogInfo();
+void showManLogInfo();
+void initLogLib(syslog_lib_t *pSysLogLib, manlog_lib_t *pManLogLib);
+void deinitLogLib();
+
+LPUSERINFO GetUserInfo(int userNo);
+
+实现下列接口：
+LPUSERINFO GetUserInfoByUserId(int userid);
+
+
+int GetQueueSysLogElemNum(SysLogLinkQueue Q);
+int GetQueueManLogElemNum(ManLogLinkQueue Q);
+
+
+typedef struct __manlog_index_t_
+{
+	unsigned int logNo;			//从0开始计数
+	char logFileStatus;			//文件状态  0：正常  1：删除
+	unsigned int logStartAddr;	//指向的文件的起始地址
+	int logFileSize;			//指向的文件的大小 
+	char logType;               //日志类型
+    char logSubType;            //日志子类型
+    unsigned int logTime;       //日志时间
+    char logUserName[MAX_USER_NAME_LEN]; //操作者姓名
+    unsigned int logUserNo;          //用户工号
+    unsigned int logUserId;          //用户id号
+    int  logOpType;             //操作类型
+    char logResult;             //操作结果
+    char logMsg[MAX_MSG_LEN];   //操作详细结果
+    char unused[64];            //保留 
+} manlog_index_t;
+
+TRACE("%s %d\r\n", __FUNCTION__, __LINE__);
+
+int AddSysLog(char subType, int opType, char result, char *pLogMsg);
+int AddManLog(char subType, int opType, char result, char *pLogMsg, int iUserId);
+
+int getSysLogFlag();
+void setSysLogFlag(int flag);
+int getManLogFlag();
+void setManLogFlag(int flag);
+
+
+void SetAdminLogShare(char cFlag, unsigned int uiUserNo, unsigned int uiUserId, char *pAdminName);
+char GetAdminLogShareFlag();
+
+AddLog((GetAdminNum() > 0 ? eDevAdmin : eDevNormal), LOG_USER_MODIFY, eSucc, acMsg);
+
+ AddLog((GetAdminNum() > 0 ? eDevAdmin : eDevNormal), LOG_USER_DEL, eSucc, NULL);
+ 
+ if(uiExportType == 1)
+		sprintf(aTmpBuf, "%s", (char *)GetLangText(10116, (char *)"导出记录成功"));
+	else if(uiExportType == 2)
+		sprintf(aTmpBuf, "%s", (char *)GetLangText(10115, (char *)"导出用户成功"));
+	else if(uiExportType == 3)
+		sprintf(aTmpBuf, "%s", (char *)GetLangText(10114, (char *)"导入用户成功"));
+	else if(uiExportType == 4)
+		sprintf(aTmpBuf, "%s", (char *)GetLangText(11790, (char *)"导入用户列表"));
+	else if(uiExportType == 5)
+	{
+		sprintf(aTmpBuf, "%s%s", (char *)GetLangText(11536, (char *)"导出部分用户"),
+			(char *)GetLangText(11176, (char *)"成功"));
+	}

@@ -1,0 +1,20 @@
+TARGET = md5test
+
+OBJS = main.o md5.o md5encode.o
+
+COMPILER_PATH = arm-linux-
+
+CC = $(COMPILER_PATH)gcc
+CXX = $(COMPILER_PATH)g++
+LD = $(COMPILER_PATH)ld
+AR = $(COMPILER_PATH)ar
+
+%.o: %.c $(COMPILER_FILE)
+	$(CC) -c $(CPPFLAGS) -g -o $@ $<
+	
+md5test: $(OBJS)
+	$(CC) -g -o $@ $^
+
+clean:
+	rm -f *.o $(TARGET)
+

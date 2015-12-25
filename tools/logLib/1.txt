@@ -1,0 +1,154 @@
+int searchRecord(unsigned int searchConditionFlag, syslog_search_condition_t *pSearchCondition, syslog_list_t *pRecordList)
+{
+	int n = 0;
+	//存放记录索引
+	int indexFd = 0;
+	struct tm Tm;
+	struct tm *pTm = &Tm;
+	time_t tt;
+	unsigned int tmpTime = 0;
+	unsigned int tmpEndTime = 0;
+	char indexFile[GENERAL_PATH_LEN] = {0};
+	syslog_index_t fileIndex;
+	syslog_info_t *pTmpInfo = NULL;
+	syslog_info_t *pRecordInfo = NULL;
+	int logNo = 0;
+	int logNum = 0;
+	//查询结束标记   =1:表示查询结束
+	int searchOverFlag = 0;
+	//结束时，当前文件已读取的位置
+	int searchOverAddr = 0;
+	
+	/* 只要进行记录查询，就把记录队列中的记录全部更新存储到SD卡中 */
+	//setRecordFlag(TRUE);
+
+    if(pRecordList == NULL)
+	{
+		return -1;
+	}
+
+	if(pSearchCondition == NULL)
+	{
+		return -2;
+	}
+
+	//时间非法
+	if(pSearchCondition->startTime > pSearchCondition->endTime)
+	{
+        printf("pSearchCondition->startTime %u, pSearchCondition->endTime %u %s %d\r\n", pSearchCondition->startTime, pSearchCondition->endTime, __FUNCTION__, __LINE__);
+
+		return -3;
+	}
+
+	pRecordInfo = &pRecordList->head;
+
+	tt = pSearchCondition->endTime;
+	localtime_r(&tt, pTm);
+	//将时间转换成20120224格式
+	tmpEndTime = (pTm->tm_year + 1900) * 10000 + (pTm->tm_mon + 1) * 100 + pTm->tm_mday;
+
+	while(1)
+	{
+		tt = pSearchCondition->startTime;
+		localtime_r(&tt, pTm);
+		tmpTime = (pTm->tm_year + 1900) * 10000 + (pTm->tm_mon + 1) * 100 + pTm->tm_mday;
+		if(tmpTime > tmpEndTime)
+		{
+			break;
+		}
+		
+		sprintf(indexFile, "%s/%08d.index", g_syslog_lib.sysLogIndexPath, tmpTime);
+
+		indexFd = open(indexFile, O_RDONLY | O_NOATIME, 0666);
+		if(indexFd <= 0)
+		{
+			pSearchCondition->startAddr = 0;
+
+			pSearchCondition->startTime = TimeToNextDay(pSearchCondition->startTime);
+			
+			continue;
+		}
+
+		if(pSearchCondition->startAddr > 0)
+		{
+			lseek(indexFd, pSearchCondition->startAddr, SEEK_SET);
+		}
+		
+		searchOverAddr = 0;
+        
+		while(1)
+		{
+			n = read(indexFd, &fileIndex, sizeof(syslog_index_t));
+			if(n != sizeof(syslog_index_t))
+			{
+				break;
+			}
+
+			searchOverAddr += sizeof(syslog_index_t);
+
+			//记录合法
+			if((fileIndex.logTime >= pSearchCondition->startTime) 
+				&& (fileIndex.logTime <= pSearchCondition->endTime))
+			{
+				/* 记录已删除 */
+				if (fileIndex.logFileStatus == 1)
+				{
+					continue;
+				}
+
+				pTmpInfo = (syslog_info_t *)malloc(sizeof(syslog_info_t));
+				if(pTmpInfo != NULL)
+				{
+					memset(pTmpInfo, 0, sizeof(syslog_info_t));
+					memcpy(&pTmpInfo->logIndex, &fileIndex, sizeof(syslog_index_t));
+					
+					logNo++;
+					logNum++;
+					
+					pTmpInfo->logCurNo = logNo;
+					pRecordList->logNum = logNum;
+					pRecordInfo->next = pTmpInfo;
+					
+					if(logNo == 1)
+					{
+						pRecordInfo->cur = pTmpInfo;
+					}
+					
+					pRecordInfo = pTmpInfo;
+
+					//判断查询的记录数是否达到要求的记录数，达到后则本次查询结束
+					if((pSearchCondition->searchNum > 0) 
+						&& (logNum >= pSearchCondition->searchNum))
+					{
+						printf("search record num %d %s %d\r\n", logNum, __FUNCTION__, __LINE__);
+						
+						searchOverFlag = 1;
+						
+						break;
+					}
+				}
+			}
+		}
+		
+		if(indexFd > 0)
+		{
+			close(indexFd);
+			indexFd = 0;
+		}
+
+		//查询结束
+		if(searchOverFlag == 1)
+		{
+			pSearchCondition->startAddr += searchOverAddr;
+			
+			break;
+		}
+		
+		pSearchCondition->startTime = TimeToNextDay(pSearchCondition->startTime);
+		
+		//换天了，所以将起始地址清零
+		pSearchCondition->startAddr = 0;
+	}
+
+	return 0;
+}

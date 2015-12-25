@@ -1,0 +1,177 @@
+int searchSysLog(unsigned int searchCondFlag, syslog_search_condition_t *pSearchCondition, syslog_list_t *pSysLogList)
+{
+	int n = 0;
+	//int ret = 0;
+	//存放数据到excel表
+	int excelFd = 0;
+	//存放记录索引
+	int indexFd = 0;
+	//存放记录照的数据文件
+	int dataFd = 0;
+	struct tm Tm;
+	struct tm *pTm = &Tm;
+	time_t tt;
+	unsigned int tmpTime = 0;
+	unsigned int tmpEndTime = 0;
+	char indexFile[GENERAL_PATH_LEN] = {0};
+	syslog_index_t sysLogIndex;
+	syslog_info_t *pTmpInfo = NULL;
+	syslog_info_t *pSysLogInfo = NULL;
+	int sysLogNo = 0;
+	int sysLogNum = 0;
+	//查询结束标记   =1:表示查询结束
+	int searchOverFlag = 0;
+	//结束时，当前文件已读取的位置
+	int searchOverAddr = 0;
+	
+	/* 只要进行记录查询，就把记录队列中的记录全部更新存储到SD卡中 */
+	//setRecordFlag(TRUE);
+
+    if(pSysLogList == NULL)
+	{
+		return -1;
+	}
+
+	if(pSearchCondition == NULL)
+	{
+		return -2;
+	}
+
+	//时间非法
+	if(pSearchCondition->startTime > pSearchCondition->endTime)
+	{
+        printf("pSearchCondition->startTime %u, pSearchCondition->endTime %u %s %d\r\n", pSearchCondition->startTime, pSearchCondition->endTime, __FUNCTION__, __LINE__);
+
+		return -3;
+	}
+
+	pSysLogInfo = &pSysLogList->head;
+
+	tt = pSearchCondition->endTime;
+	localtime_r(&tt, pTm);
+	//将时间转换成20120224格式
+	tmpEndTime = (pTm->tm_year + 1900) * 10000 + (pTm->tm_mon + 1) * 100 + pTm->tm_mday;
+
+	while(1)
+	{
+		tt = pSearchCondition->startTime;
+		localtime_r(&tt, pTm);
+		tmpTime = (pTm->tm_year + 1900) * 10000 + (pTm->tm_mon + 1) * 100 + pTm->tm_mday;
+		if(tmpTime > tmpEndTime)
+		{
+			break;
+		}
+		
+		snprintf(indexFile, (sizeof(indexFile) - 1), "%s/%08d.index", g_syslog_lib.sysLogIndexPath, tmpTime);
+
+		indexFd = open(indexFile, O_RDONLY | O_NOATIME, 0666);
+		if(indexFd <= 0)
+		{
+			pSearchCondition->startAddr = 0;
+
+			pSearchCondition->startTime = TimeToNextDay(pSearchCondition->startTime);
+			
+			continue;
+		}
+
+		if(pSearchCondition->startAddr > 0)
+		{
+			lseek(indexFd, pSearchCondition->startAddr, SEEK_SET);
+		}
+		
+		searchOverAddr = 0;
+        
+		while(1)
+		{
+			n = read(indexFd, &sysLogIndex, sizeof(syslog_index_t));
+			if(n != sizeof(syslog_index_t))
+			{
+				break;
+			}
+
+			searchOverAddr += sizeof(syslog_index_t);
+
+            //符合条件日志
+			if((sysLogIndex.logTime >= pSearchCondition->startTime) 
+				&& (sysLogIndex.logTime <= pSearchCondition->endTime))
+			{
+				//日志类型不匹配
+                if (sysLogIndex.logType != eSysLog)
+                {
+                    continue;
+                }
+
+				/* 记录已删除 */
+				if (sysLogIndex.logFileStatus == 1)
+				{
+					continue;
+				}
+
+				pTmpInfo = (syslog_info_t *)malloc(sizeof(syslog_info_t));
+				if(pTmpInfo != NULL)
+				{
+					memset(pTmpInfo, 0, sizeof(syslog_info_t));
+					memcpy(&pTmpInfo->logIndex, &sysLogIndex, sizeof(syslog_info_t));
+					
+					sysLogNo++;
+					sysLogNum++;
+					
+					pTmpInfo->logCurNo = sysLogNo;
+					pSysLogList->logNum = sysLogNum;
+					pSysLogInfo->next = pTmpInfo;
+					
+					if(sysLogNo == 1)
+					{
+						pSysLogInfo->cur = pTmpInfo;
+					}
+					
+					pSysLogInfo = pTmpInfo;
+
+					//判断查询的记录数是否达到要求的记录数，达到后则本次查询结束
+					if((pSearchCondition->searchNum > 0) 
+						&& (sysLogNum >= pSearchCondition->searchNum))
+					{
+						printf("search syslog num %d %s %d\r\n", sysLogNum, __FUNCTION__, __LINE__);
+						
+						searchOverFlag = 1;
+						
+						break;
+					}
+				}
+			}
+		}
+		
+		if(indexFd > 0)
+		{
+			close(indexFd);
+			indexFd = 0;
+		}
+		
+		if(dataFd > 0)
+		{
+			close(dataFd);
+			dataFd = 0;
+		}
+
+		//查询结束
+		if(searchOverFlag == 1)
+		{
+			pSearchCondition->startAddr += searchOverAddr;
+			
+			break;
+		}
+		
+		pSearchCondition->startTime = TimeToNextDay(pSearchCondition->startTime);
+		
+		//换天了，所以将起始地址清零
+		pSearchCondition->startAddr = 0;
+	}
+
+	if(excelFd > 0)
+	{
+		close(excelFd);
+		excelFd = 0;
+	}
+
+	return 0;
+}
